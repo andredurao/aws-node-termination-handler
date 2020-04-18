@@ -35,7 +35,7 @@ import (
 const (
 	testDateFormat      = "02 Jan 2006 15:04:05 GMT"
 	testWebhookHeaders  = `{"Content-type":"application/json"}`
-	testWebhookTemplate = `{"text":"[NTH][Instance Interruption] EventID: {{ .EventID }} - Kind: {{ .Kind }} - Description: {{ .Description }} - Start Time: {{ .StartTime }}"}`
+	testWebhookTemplate = `{"text":"[NTH][Instance Interruption] EventID: {{ .EventID }} - Kind: {{ .Kind }} - Description: {{ .Description }} - Start Time: {{ .StartTime }} - InstanceID: {{ .InstanceID }} - InstanceType: {{ .InstanceType }} - LocalHostname: {{ .LocalHostname }} - LocalIP: {{ .LocalIP }}"}`
 )
 
 func parseScheduledEventTime(inputTime string) time.Time {
@@ -43,7 +43,7 @@ func parseScheduledEventTime(inputTime string) time.Time {
 	return scheduledTime
 }
 
-func getExpectedMessage(event *drainevent.DrainEvent) string {
+func getExpectedMessage(event webhook.CombinedDrainData) string {
 	webhookTemplate, err := template.New("").Parse(testWebhookTemplate)
 	if err != nil {
 		log.Printf("Webhook Error: Template parsing failed - %s\n", err)
@@ -72,6 +72,15 @@ func TestPostSuccess(t *testing.T) {
 		StartTime:   parseScheduledEventTime("21 Jan 2019 09:00:43 GMT"),
 		EndTime:     parseScheduledEventTime("21 Jan 2019 09:17:23 GMT"),
 	}
+	nodeMetadata := ec2metadata.NodeMetadata{
+		InstanceID:     "i-12345678901234567",
+		InstanceType:   "t3.micro",
+		LocalHostname:  "ec2-random-instance",
+		LocalIP:        "172.0.0.10",
+		PublicHostname: "ec2-10-10-10-10.compute-1.amazonaws.com",
+		PublicIP:       "10.10.10.10",
+	}
+	combined := webhook.CombinedDrainData{nodeMetadata, *event}
 
 	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		h.Equals(t, req.Method, "POST")
@@ -93,7 +102,7 @@ func TestPostSuccess(t *testing.T) {
 		if err := json.Unmarshal([]byte(requestBody), &requestMap); err != nil {
 			t.Error("Unable to parse request body to json.")
 		}
-		h.Equals(t, getExpectedMessage(event), requestMap["text"])
+		h.Equals(t, getExpectedMessage(combined), requestMap["text"])
 
 		rw.Write([]byte(`OK`))
 	}))
@@ -104,8 +113,6 @@ func TestPostSuccess(t *testing.T) {
 		WebhookHeaders:  testWebhookHeaders,
 		WebhookTemplate: testWebhookTemplate,
 	}
-
-	nodeMetadata := ec2metadata.NodeMetadata{}
 
 	webhook.Post(nodeMetadata, event, nthconfig)
 }
