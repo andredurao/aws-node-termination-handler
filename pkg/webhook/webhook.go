@@ -27,7 +27,8 @@ import (
 	"github.com/aws/aws-node-termination-handler/pkg/ec2metadata"
 )
 
-type combinedDrainData struct {
+// CombinedDrainData joins data from drain event and EC2 metadata
+type CombinedDrainData struct {
 	ec2metadata.NodeMetadata
 	drainevent.DrainEvent
 }
@@ -41,7 +42,7 @@ func Post(additionalInfo ec2metadata.NodeMetadata, event *drainevent.DrainEvent,
 		return
 	}
 
-	var combined = combinedDrainData{additionalInfo, *event}
+	var combined = CombinedDrainData{additionalInfo, *event}
 
 	var byteBuffer bytes.Buffer
 	err = webhookTemplate.Execute(&byteBuffer, combined)
@@ -96,7 +97,7 @@ func ValidateWebhookConfig(nthConfig config.Config) error {
 	}
 
 	var byteBuffer bytes.Buffer
-	err = webhookTemplate.Execute(&byteBuffer, &combinedDrainData{})
+	err = webhookTemplate.Execute(&byteBuffer, &CombinedDrainData{})
 	if err != nil {
 		return fmt.Errorf("Unable to execute webhook template: %w", err)
 	}
